@@ -1,5 +1,6 @@
 import React, {useState} from "react";
 import {GoogleGenAI} from "@google/genai";
+import {marked} from "marked";
 
 const MODEL = 'gemini-3.5-flash'
 
@@ -8,6 +9,7 @@ function App() {
     const [isLoading, setIsLoading] = useState(false);
     const [summary, setSummary] = useState('');
     const [summaryType, setSummaryType] = useState('brief');
+    const [error, setError] = useState()
 
     // Initialize the client with your key
     const [ai, setAi] = useState( undefined);
@@ -30,7 +32,7 @@ function App() {
 
     const getSummaryFromAi = async (pageContent, summaryType, apiKey) => {
         // Truncate very long texts to avoid API limits (typically around 30K tokens)
-        const maxLength = 20000;
+        const maxLength = 2000;
         const truncatedText =
             pageContent.length > maxLength ? pageContent.substring(0, maxLength) + "..." : pageContent;
 
@@ -68,6 +70,19 @@ function App() {
                 }
             );
 
+
+            // const res = await fetch('https://api.openai.com/v1/chat/completions', {
+            //     method: 'POST',
+            //     headers: {
+            //         'Content-Type': 'application/json',
+            //         'Authorization': `Bearer ${apiKey}`
+            //     },
+            //     body: JSON.stringify({
+            //         model: MODEL, // or 'gpt-4o-mini' depending on your tier access
+            //         messages: [{ role: 'user', content: truncatedText }]
+            //     })
+            // });
+
             if (!res.ok) {
                 const errorData = await res.json();
                 throw new Error(errorData.error?.message || "API request failed");
@@ -75,10 +90,12 @@ function App() {
 
             const data = await res.json();
             return (
-                data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+                data?.candidates?.[0]?.content?.parts?.[0]?.text || data.choices[0].message.content ||
                 "No summary available."
             );
         } catch (error) {
+            setIsLoading(false);
+            setError(error.message);
             console.error("Error calling Gemini API:", error);
 
             throw new Error("Failed to generate summary. Please try again later.", { cause: error });
@@ -89,6 +106,7 @@ function App() {
 
     async function handleGenerateSummary() {
         console.log(`generate summary`)
+        setError(null);
         if(!apiKey) return console.error('No API key found');
         try{
 
@@ -123,7 +141,6 @@ function App() {
         console.log('Results',results)
         return results[0].result;
     };
-
 
     const getScrappingText = ()=>{
         const articleText = document.querySelector("article");
@@ -198,7 +215,7 @@ function App() {
                         </div>
                     )}
                     {apiKey && !isLoading && (
-                        <div className="w-full h-full">
+                        <div className="w-full">
                             <div className="flex items-center justify-between">
                                 <select id="summary-type" className="border border-gray-300 rounded-md p-2"
                                         onChange={(e) => handleSummaryTypeChange(e)}>
@@ -219,10 +236,20 @@ function App() {
                                     </button>
                                 </div>
                             </div>
-                            <pre id="summary_result"
-                                 className="w-full min-h-20 h-max mt-5 border boder-gray-300 rounded-md p-2 overflow-y-scroll text-wrap">{summary?summary:'Select Summary Type and click Generate Summary....'}</pre>
+
+                            <div
+                                id="summary_result"
+                                className="w-full min-h-20 h-fit mt-5 border border-gray-300 rounded-md p-2 overflow-y-auto"
+                                dangerouslySetInnerHTML={{
+                                    __html: summary
+                                        ? marked.parse(summary)
+                                        : "<p>Select Summary Type and click Generate Summary....</p>",
+                                }}
+                            />
+
                         </div>
                     )}
+                    {error && <p className="text-red-500 mt-2 overflow-x-scroll text-wrap w-full max-w-full">{error}</p>}
                 </div>
             </div>
         </>
